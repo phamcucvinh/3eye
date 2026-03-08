@@ -1,0 +1,973 @@
+//+-----------------------------------------------------------------+
+//|                                                            .mq4 |
+//|                                       노다마타운-EA                |
+//|                                                                 |
+#property copyright "Licensed until March 2026"
+#property link      ""
+#property version   "2.00"
+#property strict
+#property description "3eyes EA - 스프레드 거래 전략"
+#property description "이 EA는 2026년 3월까지 라이센스가 유효합니다"
+#property description "버전 2.0: MA & RSI 필터 기능 추가"
+
+#include <stdlib.mqh>
+
+//============================================================
+// 입력 파라미터 (사용자 설정값)
+//============================================================
+
+// [EA 기본 설정]
+input string EAConfig = "";                      // 【EA 기본 설정】
+input int magicNumber = 123456;                  // 매직 넘버 (EA 식별용)
+input int slippage = 20;                         // 허용 슬리피지 (포인트)
+input color buyColor = clrYellow;                // 매수 주문 표시 색상
+input color sellColor = clrRed;                  // 매도 주문 표시 색상
+input color closeColor = clrAqua;                // 청산 주문 표시 색상
+input int ordertryMax = 10;                      // 주문 재시도 횟수
+
+// [서브 심볼 설정]
+input string SubSymbolConfig = "";               // 【서브 심볼 설정】
+input string SubSymbol = "USDJPY";               // 비교할 서브 심볼
+input bool UseAccountLimit = false;              // 계좌 제한 사용 여부
+input int AccountLimit = 500000;                 // 제한할 계좌 번호
+
+// [가격 스케일링 설정]
+input string ScalingConfig = "";                 // 【가격 스케일링 설정】
+input ENUM_APPLIED_PRICE PriceType = PRICE_CLOSE;// 비교할 가격 타입
+input int ScalingPeriod = 100;                   // 스케일 계산 기간 (바 개수)
+input double ScalingMultiplier = 1.0;            // 수동 스케일링 배수
+
+// [진입 설정 - 11단계 마틴게일]
+input string entryConfig = "";                   // 【진입 설정】
+// 1단계
+input int kairi1 = 200;                          // 1단계 진입 divergence (포인트)
+input double lots1 = 0.01;                       // 1단계 로트 수
+input double TP1 = 1.0;                          // 1단계 이익 목표 (USD)
+// 2단계
+input int kairi2 = 250;                          // 2단계 진입 divergence (포인트)
+input double lots2 = 0.01;                       // 2단계 로트 수
+input double TP2 = 1.0;                          // 2단계 이익 목표 (USD)
+// 3단계
+input int kairi3 = 300;                          // 3단계 진입 divergence (포인트)
+input double lots3 = 0.01;                       // 3단계 로트 수
+input double TP3 = 1.0;                          // 3단계 이익 목표 (USD)
+// 4단계
+input int kairi4 = 350;                          // 4단계 진입 divergence (포인트)
+input double lots4 = 0.01;                       // 4단계 로트 수
+input double TP4 = 1.0;                          // 4단계 이익 목표 (USD)
+// 5단계
+input int kairi5 = 400;                          // 5단계 진입 divergence (포인트)
+input double lots5 = 0.01;                       // 5단계 로트 수
+input double TP5 = 1.0;                          // 5단계 이익 목표 (USD)
+// 6단계
+input int kairi6 = 450;                          // 6단계 진입 divergence (포인트)
+input double lots6 = 0.01;                       // 6단계 로트 수
+input double TP6 = 1.0;                          // 6단계 이익 목표 (USD)
+// 7단계
+input int kairi7 = 500;                          // 7단계 진입 divergence (포인트)
+input double lots7 = 0.01;                       // 7단계 로트 수
+input double TP7 = 1.0;                          // 7단계 이익 목표 (USD)
+// 8단계
+input int kairi8 = 550;                          // 8단계 진입 divergence (포인트)
+input double lots8 = 0.01;                       // 8단계 로트 수
+input double TP8 = 1.0;                          // 8단계 이익 목표 (USD)
+// 9단계
+input int kairi9 = 600;                          // 9단계 진입 divergence (포인트)
+input double lots9 = 0.01;                       // 9단계 로트 수
+input double TP9 = 1.0;                          // 9단계 이익 목표 (USD)
+// 10단계
+input int kairi10 = 650;                         // 10단계 진입 divergence (포인트)
+input double lots10 = 0.01;                      // 10단계 로트 수
+input double TP10 = 1.0;                         // 10단계 이익 목표 (USD)
+// 11단계
+input int kairi11 = 700;                         // 11단계 진입 divergence (포인트)
+input double lots11 = 0.01;                      // 11단계 로트 수
+input double TP11 = 1.0;                         // 11단계 이익 목표 (USD)
+
+// [청산 설정]
+input string exitConfig = "";                    // 【청산 설정】
+input int exitKairi = 100;                       // 전체 청산 divergence (포인트)
+
+// [MA 필터 설정]
+input string MAFilterConfig = "";                // 【MA 필터 설정】
+input bool UseMAFilter = false;                  // MA 필터 사용 여부
+input int MAPeriod = 200;                        // MA 기간
+input ENUM_MA_METHOD MAMethod = MODE_SMA;        // MA 계산 방법
+input ENUM_APPLIED_PRICE MAPrice = PRICE_CLOSE;  // MA 적용 가격
+input bool MAFilterMode = true;                  // true=추세순행, false=추세역행
+
+// [RSI 필터 설정]
+input string RSIFilterConfig = "";               // 【RSI 필터 설정】
+input bool UseRSIFilter = false;                 // RSI 필터 사용 여부
+input int RSIPeriod = 14;                        // RSI 기간
+input double RSIOverbought = 70.0;               // RSI 과매수 레벨
+input double RSIOversold = 30.0;                 // RSI 과매도 레벨
+input bool RSIReverseMode = true;                // true=역발상(과매도에서 매수), false=순행
+
+//============================================================
+// 전역 변수
+//============================================================
+double lots[11];        // 각 단계별 로트 수 배열
+double TP[11];          // 각 단계별 이익 목표 배열
+int kairi[11];          // 각 단계별 진입 divergence 배열
+
+int lastNumber = 0;           // 현재까지 진입한 단계 수
+double lastTick = 0;          // 이전 메인 심볼 가격
+double lastSymbolTick = 0;    // 이전 서브 심볼 가격 (스케일 적용)
+double scalingRatio = 1.0;    // 두 심볼 간 스케일링 비율
+
+//+------------------------------------------------------------------+
+//| EA 초기화 함수                                                      |
+//| - EA가 차트에 로드될 때 한 번 실행                                      |
+//| - 배열 초기화 및 스케일링 비율 계산                                      |
+//+------------------------------------------------------------------+
+int OnInit() {
+   // 각 단계별 로트 수를 배열에 저장
+   lots[0] = lots1;
+   lots[1] = lots2;
+   lots[2] = lots3;
+   lots[3] = lots4;
+   lots[4] = lots5;
+   lots[5] = lots6;
+   lots[6] = lots7;
+   lots[7] = lots8;
+   lots[8] = lots9;
+   lots[9] = lots10;
+   lots[10] = lots11;
+   
+   // 각 단계별 이익 목표를 배열에 저장
+   TP[0] = TP1;
+   TP[1] = TP2;
+   TP[2] = TP3;
+   TP[3] = TP4;
+   TP[4] = TP5;
+   TP[5] = TP6;
+   TP[6] = TP7;
+   TP[7] = TP8;
+   TP[8] = TP9;
+   TP[9] = TP10;
+   TP[10] = TP11;
+   
+   // 각 단계별 진입 divergence를 배열에 저장
+   kairi[0] = kairi1;
+   kairi[1] = kairi2;
+   kairi[2] = kairi3;
+   kairi[3] = kairi4;
+   kairi[4] = kairi5;
+   kairi[5] = kairi6;
+   kairi[6] = kairi7;
+   kairi[7] = kairi8;
+   kairi[8] = kairi9;
+   kairi[9] = kairi10;
+   kairi[10] = kairi11;
+   
+   // 서브 심볼 존재 여부 확인
+   if (MarketInfo(SubSymbol, MODE_POINT) == 0) {
+      Print("오류: 서브 심볼 ", SubSymbol, "을(를) 찾을 수 없습니다!");
+      return INIT_FAILED;
+   }
+   
+   // 초기 스케일링 비율 계산 (두 심볼의 가격 차이 보정)
+   CalculateScalingRatio();
+   
+   // 초기화 성공 메시지 출력
+   Print("===========================================");
+   Print("EA 초기화 성공");
+   Print("메인 심볼: ", _Symbol);
+   Print("서브 심볼: ", SubSymbol);
+   Print("초기 스케일링 비율: ", DoubleToStr(scalingRatio, 5));
+   Print("라이센스 유효기간: 2026년 3월까지");
+   Print("현재 날짜: ", Year(), "년 ", Month(), "월");
+   
+   // 필터 설정 표시
+   if (UseMAFilter) {
+      Print("MA 필터 활성: 기간=", MAPeriod, ", 모드=", MAFilterMode ? "순행" : "역행");
+   }
+   if (UseRSIFilter) {
+      Print("RSI 필터 활성: 기간=", RSIPeriod, ", 과매수=", RSIOverbought, 
+            ", 과매도=", RSIOversold, ", 모드=", RSIReverseMode ? "역발상" : "순행");
+   }
+   if (!UseMAFilter && !UseRSIFilter) {
+      Print("필터 미사용 - 기본 Divergence 전략만 사용");
+   }
+   
+   Print("===========================================");;
+   
+   // 라이센스 만료 체크 (2026년 3월 이후 작동 중지)
+   if (Year() > 2026 || (Year() == 2026 && Month() > 3)) {
+      Alert("EA 라이센스 만료! 2026년 3월까지만 유효합니다.");
+      return INIT_FAILED;
+   }
+   
+   return INIT_SUCCEEDED;
+}
+
+//+------------------------------------------------------------------+
+//| 스케일링 비율 계산 함수                                           |
+//| - 두 심볼의 가격 범위가 다를 때 비교를 위한 비율 계산              |
+//| - 예: EURUSD(1.1) vs USDJPY(150) -> 비율로 조정                  |
+//+------------------------------------------------------------------+
+void CalculateScalingRatio() {
+   double mainAvg = 0;     // 메인 심볼 평균 가격
+   double subAvg = 0;      // 서브 심볼 평균 가격
+   int count = 0;          // 유효한 데이터 개수
+   
+   // 설정된 기간 동안의 평균 가격 계산
+   for (int i = 0; i < ScalingPeriod && i < Bars; i++) {
+      mainAvg += GetPrice(_Symbol, i);
+      double subPrice = GetSubSymbolPrice(i);
+      if (subPrice > 0) {
+         subAvg += subPrice;
+         count++;
+      }
+   }
+   
+   // 평균값 계산 및 스케일링 비율 산출
+   if (count > 0) {
+      mainAvg /= count;
+      subAvg /= count;
+      if (subAvg > 0) {
+         scalingRatio = (mainAvg / subAvg) * ScalingMultiplier;
+      }
+   }
+   
+   // 비정상적인 비율 방지 (안전장치)
+   if (scalingRatio <= 0 || scalingRatio > 1000) {
+      scalingRatio = 1.0;
+   }
+}
+
+//+------------------------------------------------------------------+
+//| 선택된 가격 타입에 따른 가격 반환                                  |
+//| - Close, Open, High, Low 등 다양한 가격 타입 지원                 |
+//+------------------------------------------------------------------+
+double GetPrice(string symbol, int shift) {
+   switch(PriceType) {
+      case PRICE_CLOSE:     // 종가
+         return iClose(symbol, _Period, shift);
+      case PRICE_OPEN:      // 시가
+         return iOpen(symbol, _Period, shift);
+      case PRICE_HIGH:      // 고가
+         return iHigh(symbol, _Period, shift);
+      case PRICE_LOW:       // 저가
+         return iLow(symbol, _Period, shift);
+      case PRICE_MEDIAN:    // 중간가 (고가+저가)/2
+         return (iHigh(symbol, _Period, shift) + iLow(symbol, _Period, shift)) / 2;
+      case PRICE_TYPICAL:   // 대표가 (고가+저가+종가)/3
+         return (iHigh(symbol, _Period, shift) + iLow(symbol, _Period, shift) + iClose(symbol, _Period, shift)) / 3;
+      case PRICE_WEIGHTED:  // 가중가 (고가+저가+종가*2)/4
+         return (iHigh(symbol, _Period, shift) + iLow(symbol, _Period, shift) + 2 * iClose(symbol, _Period, shift)) / 4;
+      default:
+         return iClose(symbol, _Period, shift);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| 특정 바의 서브 심볼 가격 반환                                      |
+//+------------------------------------------------------------------+
+double GetSubSymbolPrice(int shift) {
+   return GetPrice(SubSymbol, shift);
+}
+
+//+------------------------------------------------------------------+
+//| MA 필터 체크 함수                                                 |
+//| - 이동평균선 기준으로 추세 방향 확인                               |
+//| - 반환값: true=진입 허용, false=진입 금지                         |
+//+------------------------------------------------------------------+
+bool CheckMAFilter(bool isBuySignal) {
+   // MA 필터 미사용 시 항상 true
+   if (!UseMAFilter) return true;
+   
+   // 메인 심볼 MA 계산
+   double ma_main = iMA(_Symbol, _Period, MAPeriod, 0, MAMethod, MAPrice, 0);
+   double ma_main_prev = iMA(_Symbol, _Period, MAPeriod, 0, MAMethod, MAPrice, 1);
+   
+   // 서브 심볼 MA 계산
+   double ma_sub = iMA(SubSymbol, _Period, MAPeriod, 0, MAMethod, MAPrice, 0);
+   double ma_sub_prev = iMA(SubSymbol, _Period, MAPeriod, 0, MAMethod, MAPrice, 1);
+   
+   // 현재 가격
+   double price_main = Close[0];
+   double price_sub = MarketInfo(SubSymbol, MODE_BID);
+   
+   // MA 추세 방향
+   bool mainUptrend = (price_main > ma_main);
+   bool mainMAUp = (ma_main > ma_main_prev);
+   bool subUptrend = (price_sub > ma_sub);
+   bool subMAUp = (ma_sub > ma_sub_prev);
+   
+   if (MAFilterMode) {
+      // 순행 모드: 추세 방향과 같은 방향으로만 진입
+      if (isBuySignal) {
+         // 메인 매수 = 메인 상승 추세
+         return mainUptrend && mainMAUp;
+      } else {
+         // 메인 매도 = 메인 하락 추세
+         return !mainUptrend && !mainMAUp;
+      }
+   } else {
+      // 역행 모드: 추세 반대 방향으로 진입 (평균회귀)
+      if (isBuySignal) {
+         // 메인 매수 = 메인이 MA 아래 (저평가)
+         return !mainUptrend;
+      } else {
+         // 메인 매도 = 메인이 MA 위 (고평가)
+         return mainUptrend;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| RSI 필터 체크 함수                                                |
+//| - RSI 과매수/과매도 상태 확인                                     |
+//| - 반환값: true=진입 허용, false=진입 금지                         |
+//+------------------------------------------------------------------+
+bool CheckRSIFilter(bool isBuySignal) {
+   // RSI 필터 미사용 시 항상 true
+   if (!UseRSIFilter) return true;
+   
+   // 메인 심볼 RSI
+   double rsi_main = iRSI(_Symbol, _Period, RSIPeriod, PRICE_CLOSE, 0);
+   double rsi_main_prev = iRSI(_Symbol, _Period, RSIPeriod, PRICE_CLOSE, 1);
+   
+   // 서브 심볼 RSI
+   double rsi_sub = iRSI(SubSymbol, _Period, RSIPeriod, PRICE_CLOSE, 0);
+   double rsi_sub_prev = iRSI(SubSymbol, _Period, RSIPeriod, PRICE_CLOSE, 1);
+   
+   // RSI 상태 판단
+   bool mainOverbought = (rsi_main > RSIOverbought);
+   bool mainOversold = (rsi_main < RSIOversold);
+   bool subOverbought = (rsi_sub > RSIOverbought);
+   bool subOversold = (rsi_sub < RSIOversold);
+   
+   // RSI 다이버전스 체크 (선택적)
+   bool bullishDiv = (rsi_main > rsi_main_prev && Close[0] < Close[1]); // 강세 다이버전스
+   bool bearishDiv = (rsi_main < rsi_main_prev && Close[0] > Close[1]); // 약세 다이버전스
+   
+   if (RSIReverseMode) {
+      // 역발상 모드: 과매도에서 매수, 과매수에서 매도
+      if (isBuySignal) {
+         // 메인 매수 = 메인 과매도 상태
+         return mainOversold || bullishDiv;
+      } else {
+         // 메인 매도 = 메인 과매수 상태
+         return mainOverbought || bearishDiv;
+      }
+   } else {
+      // 순행 모드: 모멘텀 방향으로 진입
+      if (isBuySignal) {
+         // 메인 매수 = RSI 상승 중 & 과매수 아님
+         return (rsi_main > 50 && rsi_main > rsi_main_prev && !mainOverbought);
+      } else {
+         // 메인 매도 = RSI 하락 중 & 과매도 아님
+         return (rsi_main < 50 && rsi_main < rsi_main_prev && !mainOversold);
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| 필터 정보 문자열 생성                                             |
+//| - 차트에 표시할 필터 상태 정보                                    |
+//+------------------------------------------------------------------+
+string GetFilterStatus() {
+   string status = "";
+   
+   // MA 필터 상태
+   if (UseMAFilter) {
+      double ma_main = iMA(_Symbol, _Period, MAPeriod, 0, MAMethod, MAPrice, 0);
+      double price_main = Close[0];
+      bool mainAboveMA = (price_main > ma_main);
+      
+      status += "\n📊 MA 필터: ";
+      status += mainAboveMA ? "↑ 상승추세" : "↓ 하락추세";
+      status += " (MA=" + DoubleToStr(ma_main, _Digits) + ")";
+   }
+   
+   // RSI 필터 상태
+   if (UseRSIFilter) {
+      double rsi_main = iRSI(_Symbol, _Period, RSIPeriod, PRICE_CLOSE, 0);
+      
+      status += "\n📈 RSI 필터: " + DoubleToStr(rsi_main, 1);
+      if (rsi_main > RSIOverbought) status += " [과매수]";
+      else if (rsi_main < RSIOversold) status += " [과매도]";
+      else status += " [중립]";
+   }
+   
+   return status;
+}
+
+//+------------------------------------------------------------------+
+//| 스케일 적용된 서브 심볼 현재 가격 반환                             |
+//| - 실시간 가격에 스케일링 비율을 적용하여 메인 심볼과 비교 가능하게 함|
+//+------------------------------------------------------------------+
+double GetScaledSubSymbolPrice() {
+   double subPrice = MarketInfo(SubSymbol, MODE_BID);
+   return subPrice * scalingRatio;
+}
+
+//+------------------------------------------------------------------+
+//| EA 종료 함수                                                      |
+//| - EA가 차트에서 제거될 때 실행                                     |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason) {
+   // 파라미터 변경이 아닌 경우 진입 단계 초기화
+   if (reason != REASON_PARAMETERS)
+      lastNumber = 0;
+   
+   // 라이센스 만료로 인한 종료 체크
+   if (Year() > 2026 || (Year() == 2026 && Month() > 3)) {
+      Print("EA 중지: 라이센스 만료 (2026년 3월까지 유효)");
+   }
+}
+
+//+------------------------------------------------------------------+
+//| 메인 거래 함수 (틱마다 실행)                                       |
+//| - 가격 divergence 모니터링                                        |
+//| - 진입/청산 신호 체크                                             |
+//| - 포지션 관리                                                     |
+//+------------------------------------------------------------------+
+void OnTick() {
+   //===============================================
+   // 1. 라이센스 만료 체크 (2026년 3월)
+   //===============================================
+   if (Year() > 2026 || (Year() == 2026 && Month() > 3)) {
+      Comment("EA 라이센스 만료 (2026년 3월까지 유효)");
+      return;  
+   }
+   
+   //===============================================
+   // 2. 계좌 제한 체크 (선택적)
+   //===============================================
+   if (UseAccountLimit && AccountNumber() == AccountLimit) {
+      Comment("EA 중지: 계좌 제한 (", AccountLimit, ")");
+      return;
+   }
+   
+   //===============================================
+   // 3. 현재 가격 데이터 가져오기
+   //===============================================
+   double currMainPrice = Close[0];                    // 메인 심볼 현재가
+   double currSymbolTick = GetScaledSubSymbolPrice();  // 서브 심볼 현재가 (스케일 적용)
+   
+   //===============================================
+   // 4. 첫 실행 시 초기화
+   //===============================================
+   if (lastSymbolTick == 0 || lastTick == 0) {
+      lastSymbolTick = currSymbolTick;
+      lastTick = currMainPrice;
+      return;
+   }
+   
+   //===============================================
+   // 5. Divergence 계산 (두 심볼 간 가격 차이)
+   //===============================================
+   int kairiPoint = (int)NormalizeDouble((MathAbs(currSymbolTick - currMainPrice) / _Point), 0);
+   int lastKairi = (int)NormalizeDouble((MathAbs(lastSymbolTick - lastTick) / _Point), 0);
+   
+   //===============================================
+   // 6. 청산 조건 체크 - Divergence가 좁혀질 때
+   //===============================================
+   if (lastNumber > 0 && kairiPoint <= exitKairi) {
+      Print(__LINE__, " 청산 실행 (Divergence 축소)");
+      Print(__LINE__, " ", _Symbol, " 현재가: ", DoubleToStr(currMainPrice, _Digits));
+      Print(__LINE__, " ", SubSymbol, " 스케일 가격: ", DoubleToStr(currSymbolTick, _Digits));
+      Print(__LINE__, " Divergence: ", IntegerToString(kairiPoint), " 포인트");
+      SendClose();  // 모든 포지션 청산
+   }
+   
+   //===============================================
+   // 7. 개별 단계 TP 체크
+   //===============================================
+   CheckExit();
+   
+   //===============================================
+   // 8. 모든 포지션 청산 시 데이터 리셋
+   //===============================================
+   int buyPos = 0, sellPos = 0;
+   GetPos(buyPos, sellPos);
+   if (buyPos <= 0 && sellPos <= 0 && lastNumber > 0) {
+      Print(__LINE__, " 모든 포지션 청산 완료 -> 초기화");
+      lastNumber = 0;
+      // 스케일링 비율 재계산
+      CalculateScalingRatio();
+   }
+   
+   //===============================================
+   // 8.5. 필터 체크
+   //===============================================
+   bool buyFilterOK = CheckMAFilter(true) && CheckRSIFilter(true);
+   bool sellFilterOK = CheckMAFilter(false) && CheckRSIFilter(false);
+   
+   // 필터 디버그 정보
+   if (UseMAFilter || UseRSIFilter) {
+      static datetime lastFilterLog = 0;
+      if (TimeCurrent() - lastFilterLog > 300) { // 5분마다 로그
+         Print("필터 상태 - Buy: ", buyFilterOK ? "OK" : "BLOCKED", 
+               ", Sell: ", sellFilterOK ? "OK" : "BLOCKED");
+         lastFilterLog = TimeCurrent();
+      }
+   }
+   
+   //===============================================
+   // 9. 진입 조건 체크 - 메인 심볼이 서브 심볼보다 낮을 때
+   //===============================================
+   if (buyFilterOK &&  // MA & RSI 필터 통과
+       NormalizeDouble(lastSymbolTick, _Digits) > 0 &&
+       NormalizeDouble(currSymbolTick, _Digits) > 0 &&
+       NormalizeDouble(currMainPrice, _Digits) < NormalizeDouble(currSymbolTick, _Digits) &&
+       lastNumber <= 10 &&
+       lastKairi < kairi[lastNumber] &&
+       kairiPoint >= kairi[lastNumber]) {
+      
+      Print(__LINE__, " 진입 신호 (메인 매수, 서브 매도), ", IntegerToString(lastNumber + 1), "단계");
+      Print(__LINE__, " ", _Symbol, " 현재가: ", DoubleToStr(currMainPrice, _Digits));
+      Print(__LINE__, " ", SubSymbol, " 스케일 가격: ", DoubleToStr(currSymbolTick, _Digits));
+      Print(__LINE__, " Divergence: ", IntegerToString(kairiPoint), " (기준: ", kairi[lastNumber], ")");
+      
+      // 필터 상태 로그
+      if (UseMAFilter) {
+         double ma = iMA(_Symbol, _Period, MAPeriod, 0, MAMethod, MAPrice, 0);
+         Print("MA 필터 통과: 가격=", DoubleToStr(currMainPrice, _Digits), 
+               ", MA=", DoubleToStr(ma, _Digits));
+      }
+      if (UseRSIFilter) {
+         double rsi = iRSI(_Symbol, _Period, RSIPeriod, PRICE_CLOSE, 0);
+         Print("RSI 필터 통과: RSI=", DoubleToStr(rsi, 1));
+      }
+      
+      // 메인 심볼 매수, 서브 심볼 매도
+      SendOrder(_Symbol, true, lots[lastNumber], magicNumber, slippage, ordertryMax, 
+                IntegerToString(lastNumber + 1), buyColor);
+      SendOrder(SubSymbol, false, lots[lastNumber], magicNumber, slippage, ordertryMax, 
+                IntegerToString(lastNumber + 1), sellColor);
+      lastNumber++;
+      
+      // 추가 진입 체크 (divergence가 여러 단계를 넘어선 경우)
+      CheckAdditionalEntries(kairiPoint, lastKairi, true);
+   }
+   //===============================================
+   // 10. 진입 조건 체크 - 메인 심볼이 서브 심볼보다 높을 때
+   //===============================================
+   else if (sellFilterOK &&  // MA & RSI 필터 통과
+            NormalizeDouble(lastSymbolTick, _Digits) > 0 &&
+            NormalizeDouble(currSymbolTick, _Digits) > 0 &&
+            NormalizeDouble(currMainPrice, _Digits) > NormalizeDouble(currSymbolTick, _Digits) &&
+            lastNumber <= 10 &&
+            lastKairi < kairi[lastNumber] &&
+            kairiPoint >= kairi[lastNumber]) {
+      
+      Print(__LINE__, " 진입 신호 (메인 매도, 서브 매수), ", IntegerToString(lastNumber + 1), "단계");
+      Print(__LINE__, " ", _Symbol, " 현재가: ", DoubleToStr(currMainPrice, _Digits));
+      Print(__LINE__, " ", SubSymbol, " 스케일 가격: ", DoubleToStr(currSymbolTick, _Digits));
+      Print(__LINE__, " Divergence: ", IntegerToString(kairiPoint), " (기준: ", kairi[lastNumber], ")");
+      
+      // 필터 상태 로그
+      if (UseMAFilter) {
+         double ma = iMA(_Symbol, _Period, MAPeriod, 0, MAMethod, MAPrice, 0);
+         Print("MA 필터 통과: 가격=", DoubleToStr(currMainPrice, _Digits), 
+               ", MA=", DoubleToStr(ma, _Digits));
+      }
+      if (UseRSIFilter) {
+         double rsi = iRSI(_Symbol, _Period, RSIPeriod, PRICE_CLOSE, 0);
+         Print("RSI 필터 통과: RSI=", DoubleToStr(rsi, 1));
+      }
+      
+      // 메인 심볼 매도, 서브 심볼 매수
+      SendOrder(_Symbol, false, lots[lastNumber], magicNumber, slippage, ordertryMax, 
+                IntegerToString(lastNumber + 1), sellColor);
+      SendOrder(SubSymbol, true, lots[lastNumber], magicNumber, slippage, ordertryMax, 
+                IntegerToString(lastNumber + 1), buyColor);
+      lastNumber++;
+      
+      // 추가 진입 체크
+      CheckAdditionalEntries(kairiPoint, lastKairi, false);
+   }
+   
+   //===============================================
+   // 11. 이전 가격 업데이트
+   //===============================================
+   lastSymbolTick = currSymbolTick;
+   lastTick = currMainPrice;
+   
+   //===============================================
+   // 12. 차트에 정보 표시
+   //===============================================
+   string expiryStatus = "";
+   if (Year() == 2026 && Month() <= 3) {
+      expiryStatus = "\n⚠️ 만료 임박: 2026년 3월 (현재: " + IntegerToString(Month()) + "/2026)";
+   } else if (Year() == 2025) {
+      expiryStatus = "\n✅ 라이센스 유효: 2026년 3월까지";
+   }
+   
+   // 필터 상태 가져오기
+   string filterStatus = GetFilterStatus();
+   
+   Comment("\n\n",
+           "\n=== 3eyes EA (인디케이터 미사용) ===",
+           expiryStatus,
+           "\n메인: ", _Symbol, " = ", DoubleToStr(currMainPrice, _Digits),
+           "\n서브: ", SubSymbol, " (원본) = ", DoubleToStr(MarketInfo(SubSymbol, MODE_BID), MarketInfo(SubSymbol, MODE_DIGITS)),
+           "\n서브: ", SubSymbol, " (스케일) = ", DoubleToStr(currSymbolTick, _Digits),
+           "\n스케일링 비율: ", DoubleToStr(scalingRatio, 5),
+           "\nDivergence: ", IntegerToString(kairiPoint), " 포인트",
+           "\n진입 단계: ", IntegerToString(lastNumber), "/11",
+           "\n다음 진입: ", (lastNumber < 11 ? IntegerToString(kairi[lastNumber]) + " 포인트" : "최대 도달"),
+           filterStatus);  // 필터 상태 추가
+}
+
+//+------------------------------------------------------------------+
+//| 추가 진입 체크 함수                                                |
+//| - divergence가 여러 단계를 한 번에 넘어선 경우 처리               |
+//| - MA & RSI 필터 적용                                             |
+//+------------------------------------------------------------------+
+void CheckAdditionalEntries(int kairiPoint, int lastKairi, bool isMainBuy) {
+   for (int i = lastNumber; i <= 10 && !IsStopped(); i++) {
+      // 필터 재확인 (매 단계마다)
+      bool filterOK = isMainBuy ? (CheckMAFilter(true) && CheckRSIFilter(true)) 
+                                : (CheckMAFilter(false) && CheckRSIFilter(false));
+      
+      if (filterOK &&  // 필터 통과
+          lastKairi < kairi[lastNumber] && 
+          kairiPoint >= kairi[lastNumber]) {
+         
+         Print(__LINE__, " 추가 진입 (필터 통과), divergence: ", IntegerToString(kairiPoint), 
+               " (기준: ", kairi[lastNumber], ")");
+         
+         if (isMainBuy) {
+            // 메인 매수, 서브 매도
+            SendOrder(_Symbol, true, lots[lastNumber], magicNumber, slippage, ordertryMax, 
+                     IntegerToString(lastNumber + 1), buyColor);
+            SendOrder(SubSymbol, false, lots[lastNumber], magicNumber, slippage, ordertryMax, 
+                     IntegerToString(lastNumber + 1), sellColor);
+         } else {
+            // 메인 매도, 서브 매수
+            SendOrder(_Symbol, false, lots[lastNumber], magicNumber, slippage, ordertryMax, 
+                     IntegerToString(lastNumber + 1), sellColor);
+            SendOrder(SubSymbol, true, lots[lastNumber], magicNumber, slippage, ordertryMax, 
+                     IntegerToString(lastNumber + 1), buyColor);
+         }
+         lastNumber++;
+      } else {
+         if (!filterOK) {
+            Print(__LINE__, " 추가 진입 차단: 필터 조건 미충족");
+         }
+         break;
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
+//| 현재 포지션 수 계산                                                |
+//| - 매수/매도 포지션 개수를 각각 계산                                |
+//+------------------------------------------------------------------+
+void GetPos(int &_buyPos, int &_sellPos) {
+   int buyPos = 0, sellPos = 0;
+   
+   // 모든 열린 주문 확인
+   for (int i = 0; i < OrdersTotal() && !IsStopped(); i++) {
+      if (!OrderSelect(i, SELECT_BY_POS))
+         continue;
+      // 매직 넘버 확인
+      if (OrderMagicNumber() != magicNumber)
+         continue;
+      // 심볼 확인
+      if (OrderSymbol() != _Symbol && OrderSymbol() != SubSymbol)
+         continue;
+         
+      int type = OrderType();
+      if (type == OP_BUY) {
+         buyPos++;
+      } else if (type == OP_SELL) {
+         sellPos++;
+      }
+   }
+   
+   _buyPos = buyPos;
+   _sellPos = sellPos;
+}
+
+//+------------------------------------------------------------------+
+//| 주문 전송 함수                                                    |
+//| - 매수/매도 주문 실행                                             |
+//| - 실패 시 재시도 로직 포함                                         |
+//+------------------------------------------------------------------+
+int SendOrder(const string _symbol,           // 거래할 심볼
+              const bool _isBuy,               // true=매수, false=매도
+              const double _lots,              // 로트 수
+              const int _magicNumber,          // 매직 넘버
+              const int _slippage,             // 슬리피지
+              const int _retryMaxNumber,       // 최대 재시도 횟수
+              const string _comment="",        // 주문 코멘트
+              const color _entryColor=clrNONE, // 주문 색상
+              const double _stopLossPrice=0,   // 손절가
+              const double _takeProfitPrice=0) // 익절가
+{
+   // 거래 허용 여부 체크
+   if (!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
+      return false;
+   if (!MQLInfoInteger(MQL_TRADE_ALLOWED))
+      return false;
+   
+   int retTicket = -1;
+   double entryLots = _lots;
+   
+   // 로트 수를 브로커 요구사항에 맞게 조정
+   if (MarketInfo(_symbol, MODE_MAXLOT) < entryLots) {
+      entryLots = MarketInfo(_symbol, MODE_MAXLOT);  // 최대 로트 제한
+   }
+   if (MarketInfo(_symbol, MODE_MINLOT) > entryLots) {
+      entryLots = MarketInfo(_symbol, MODE_MINLOT);  // 최소 로트 제한
+   }
+   
+   // 로트 스텝에 맞게 반올림
+   double lotstep = MarketInfo(_symbol, MODE_LOTSTEP);
+   int normalizeLot = (int)MathAbs(MathLog10(lotstep));
+   entryLots = MathFloor(entryLots * MathPow(10, normalizeLot)) * MathPow(0.1, normalizeLot);
+   
+   int digits = (int)MarketInfo(_symbol, MODE_DIGITS);
+   
+   // 주문 재시도 루프
+   for (int i = 1; i <= _retryMaxNumber; i++) {
+      RefreshRates();
+      ResetLastError();
+      
+      // 진입 가격 결정 (매수=Ask, 매도=Bid)
+      double entryPrice = _isBuy ? NormalizeDouble(MarketInfo(_symbol, MODE_ASK), digits) 
+                                 : NormalizeDouble(MarketInfo(_symbol, MODE_BID), digits);
+      
+      // 손절가 계산
+      double stopLoss = 0;
+      if (_stopLossPrice > 0)
+         stopLoss = _isBuy ? NormalizeDouble(entryPrice - _stopLossPrice, digits) 
+                           : NormalizeDouble(entryPrice + _stopLossPrice, digits);
+      
+      // 익절가 계산
+      double takeProfit = 0;
+      if (_takeProfitPrice > 0)
+         takeProfit = _isBuy ? NormalizeDouble(entryPrice + _takeProfitPrice, digits) 
+                             : NormalizeDouble(entryPrice - _takeProfitPrice, digits);
+      
+      // 주문 타입 결정
+      int entryType = _isBuy ? OP_BUY : OP_SELL;
+      
+      // 주문 전송
+      retTicket = OrderSend(_symbol, entryType, entryLots, entryPrice, _slippage, 
+                           stopLoss, takeProfit, _comment, _magicNumber, 0, _entryColor);
+      
+      // 주문 실패 시 처리
+      if (retTicket == -1) {
+         int errorCode = GetLastError();
+         if (errorCode != ERR_NO_ERROR) {
+            Print(__LINE__, " 주문 오류 [", IntegerToString(i), "회차] 코드: ", 
+                  IntegerToString(errorCode), " - ", ErrorDescription(errorCode));
+            // 치명적 오류는 재시도하지 않음
+            if (errorCode == ERR_TRADE_NOT_ALLOWED ||
+                errorCode == ERR_LONGS_NOT_ALLOWED ||
+                errorCode == ERR_SHORTS_NOT_ALLOWED ||
+                errorCode == ERR_NOT_ENOUGH_MONEY)
+               return retTicket;
+         }
+         Sleep(1000);  // 1초 대기 후 재시도
+         RefreshRates();
+         continue;
+      } else {
+         // 주문 성공
+         Print(__LINE__, " 주문 성공. 티켓 번호: ", IntegerToString(retTicket));
+         Sleep(300);
+         return retTicket;
+      }
+   }
+   return retTicket;
+}
+
+//+------------------------------------------------------------------+
+//| 특정 단계 포지션 청산                                             |
+//| - 특정 단계의 모든 포지션을 청산                                   |
+//+------------------------------------------------------------------+
+bool SendClose(const int _exitNumber) {
+   // 거래 허용 여부 체크
+   if (!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
+      return false;
+   if (!MQLInfoInteger(MQL_TRADE_ALLOWED))
+      return false;
+   
+   bool returnClose = true;
+   
+   // 역순으로 주문 확인 (인덱스 변경 방지)
+   for (int i = OrdersTotal() - 1; i >= 0 && !IsStopped(); i--) {
+      if (!OrderSelect(i, SELECT_BY_POS))
+         continue;
+      if (OrderCloseTime() > 0)
+         continue;
+      if (OrderMagicNumber() != magicNumber)
+         continue;
+      if (OrderSymbol() != _Symbol && OrderSymbol() != SubSymbol)
+         continue;
+      
+      int type = OrderType();
+      if (type != OP_BUY && type != OP_SELL)
+         continue;
+      
+      // 주문 코멘트로 단계 확인
+      string comment = OrderComment();
+      int number = (int)StringToInteger(comment);
+      if (number != _exitNumber)
+         continue;
+      
+      bool retClose = false;
+      
+      // 청산 재시도 루프
+      for (int closeIndex = 1; closeIndex <= ordertryMax; closeIndex++) {
+         RefreshRates();
+         ResetLastError();
+         
+         int orderTicket = OrderTicket();
+         int digits = (int)MarketInfo(OrderSymbol(), MODE_DIGITS);
+         
+         // 청산 가격 결정 (매수=Bid, 매도=Ask)
+         double closePrice = OrderType() == OP_BUY 
+                           ? NormalizeDouble(MarketInfo(OrderSymbol(), MODE_BID), digits)
+                           : NormalizeDouble(MarketInfo(OrderSymbol(), MODE_ASK), digits);
+         
+         // 청산 실행
+         retClose = OrderClose(orderTicket, OrderLots(), closePrice, slippage, closeColor);
+         
+         // 청산 실패 시 처리
+         if (!retClose) {
+            int errorCode = GetLastError();
+            if (errorCode != ERR_NO_ERROR) {
+               Print(__LINE__, " 청산 오류 [", IntegerToString(closeIndex), "회차] 코드: ", 
+                     IntegerToString(errorCode), " - ", ErrorDescription(errorCode));
+               // 치명적 오류는 재시도하지 않음
+               if (errorCode == ERR_TRADE_NOT_ALLOWED ||
+                   errorCode == ERR_LONGS_NOT_ALLOWED ||
+                   errorCode == ERR_SHORTS_NOT_ALLOWED)
+                  return false;
+            }
+            Sleep(1000);  // 1초 대기 후 재시도
+         } else {
+            // 청산 성공
+            Print(__LINE__, " 포지션 청산 완료. 티켓: ", IntegerToString(orderTicket));
+            Sleep(300);
+            break;
+         }
+      }
+      if (!retClose)
+         returnClose = false;
+   }
+   return returnClose;
+}
+
+//+------------------------------------------------------------------+
+//| 모든 포지션 청산                                                  |
+//| - EA가 관리하는 모든 포지션을 청산                                 |
+//+------------------------------------------------------------------+
+bool SendClose(void) {
+   // 거래 허용 여부 체크
+   if (!TerminalInfoInteger(TERMINAL_TRADE_ALLOWED))
+      return false;
+   if (!MQLInfoInteger(MQL_TRADE_ALLOWED))
+      return false;
+   
+   bool returnClose = true;
+   
+   // 역순으로 주문 확인
+   for (int i = OrdersTotal() - 1; i >= 0 && !IsStopped(); i--) {
+      if (!OrderSelect(i, SELECT_BY_POS))
+         continue;
+      if (OrderCloseTime() > 0)
+         continue;
+      if (OrderMagicNumber() != magicNumber)
+         continue;
+      if (OrderSymbol() != _Symbol && OrderSymbol() != SubSymbol)
+         continue;
+      
+      int type = OrderType();
+      if (type != OP_BUY && type != OP_SELL)
+         continue;
+      
+      bool retClose = false;
+      
+      // 청산 재시도 루프
+      for (int closeIndex = 1; closeIndex <= ordertryMax; closeIndex++) {
+         RefreshRates();
+         ResetLastError();
+         
+         int orderTicket = OrderTicket();
+         int digits = (int)MarketInfo(OrderSymbol(), MODE_DIGITS);
+         
+         // 청산 가격 결정
+         double closePrice = OrderType() == OP_BUY 
+                           ? NormalizeDouble(MarketInfo(OrderSymbol(), MODE_BID), digits)
+                           : NormalizeDouble(MarketInfo(OrderSymbol(), MODE_ASK), digits);
+         
+         // 청산 실행
+         retClose = OrderClose(orderTicket, OrderLots(), closePrice, slippage, closeColor);
+         
+         // 청산 실패 시 처리
+         if (!retClose) {
+            int errorCode = GetLastError();
+            if (errorCode != ERR_NO_ERROR) {
+               Print(__LINE__, " 청산 오류 [", IntegerToString(closeIndex), "회차] 코드: ", 
+                     IntegerToString(errorCode), " - ", ErrorDescription(errorCode));
+               if (errorCode == ERR_TRADE_NOT_ALLOWED ||
+                   errorCode == ERR_LONGS_NOT_ALLOWED ||
+                   errorCode == ERR_SHORTS_NOT_ALLOWED)
+                  return false;
+            }
+            Sleep(1000);
+         } else {
+            Print(__LINE__, " 포지션 청산 완료. 티켓: ", IntegerToString(orderTicket));
+            Sleep(300);
+            break;
+         }
+      }
+      if (!retClose)
+         returnClose = false;
+   }
+   return returnClose;
+}
+
+//+------------------------------------------------------------------+
+//| 개별 단계 TP 체크 및 청산                                         |
+//| - 각 단계별로 설정된 이익 목표 도달 시 해당 단계만 청산            |
+//+------------------------------------------------------------------+
+void CheckExit(void) {
+   double profit[11];
+   ArrayInitialize(profit, 0);  // 배열 초기화
+   
+   // 각 단계별 손익 계산
+   for (int i = OrdersTotal() - 1; i >= 0 && !IsStopped(); i--) {
+      if (!OrderSelect(i, SELECT_BY_POS))
+         continue;
+      if (OrderCloseTime() > 0)
+         continue;
+      if (OrderMagicNumber() != magicNumber)
+         continue;
+      if (OrderSymbol() != _Symbol && OrderSymbol() != SubSymbol)
+         continue;
+      
+      // 주문 코멘트에서 단계 번호 추출
+      string comment = OrderComment();
+      int number = (int)StringToInteger(comment);
+      
+      // 해당 단계의 총 손익 계산 (손익 + 수수료 + 스왑)
+      if (number > 0) {
+         profit[number - 1] += OrderProfit();      // 순손익
+         profit[number - 1] += OrderCommission();   // 수수료
+         profit[number - 1] += OrderSwap();         // 스왑
+      }
+   }
+   
+   // 각 단계별 TP 도달 여부 체크
+   for (int i = 0; i < 11 && !IsStopped(); i++) {
+      if (NormalizeDouble(profit[i], 3) >= NormalizeDouble(TP[i], 3)) {
+         Print(__LINE__, " 개별 TP 도달");
+         Print(__LINE__, " 단계: ", IntegerToString(i + 1));
+         Print(__LINE__, " 손익: $", DoubleToString(profit[i], 3), " / 목표: $", DoubleToString(TP[i], 3));
+         SendClose(i + 1);  // 해당 단계만 청산
+      }
+   }
+}
+
+//+------------------------------------------------------------------+
