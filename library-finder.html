@@ -1,0 +1,584 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5km 반경 도서관 찾기</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif;
+    background: #0f172a;
+    color: #e2e8f0;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  header {
+    background: linear-gradient(135deg, #1e293b, #334155);
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.4);
+    z-index: 1000;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  header h1 {
+    font-size: 20px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .controls {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  .radius-selector {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #0f172a;
+    padding: 6px 12px;
+    border-radius: 8px;
+    border: 1px solid #334155;
+  }
+
+  .radius-selector label {
+    font-size: 13px;
+    color: #94a3b8;
+    white-space: nowrap;
+  }
+
+  .radius-selector select {
+    background: #1e293b;
+    color: #e2e8f0;
+    border: 1px solid #475569;
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+
+  button {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #fff;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(16,185,129,0.4); }
+  button:active { transform: translateY(0); }
+
+  button.secondary {
+    background: linear-gradient(135deg, #475569, #334155);
+  }
+
+  button.secondary:hover { box-shadow: 0 4px 12px rgba(71,85,105,0.4); }
+
+  .main-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+  }
+
+  #map { flex: 1; min-height: 0; }
+
+  .sidebar {
+    width: 360px;
+    background: #1e293b;
+    overflow-y: auto;
+    border-left: 1px solid #334155;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .sidebar-header {
+    padding: 16px;
+    background: #334155;
+    font-weight: 700;
+    font-size: 15px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .count-badge {
+    background: #10b981;
+    color: #fff;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 13px;
+    font-weight: 700;
+  }
+
+  .store-list { padding: 8px; flex: 1; }
+
+  .store-card {
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    padding: 14px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .store-card:hover {
+    border-color: #10b981;
+    background: #1a2744;
+    transform: translateX(-2px);
+  }
+
+  .store-card .name {
+    font-weight: 700;
+    font-size: 15px;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+
+  .store-card .type-tag {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: 6px;
+    font-weight: 600;
+  }
+
+  .tag-public { background: #10b98122; color: #34d399; border: 1px solid #10b98144; }
+  .tag-university { background: #8b5cf622; color: #a78bfa; border: 1px solid #8b5cf644; }
+  .tag-community { background: #f59e0b22; color: #fbbf24; border: 1px solid #f59e0b44; }
+  .tag-children { background: #ec489922; color: #f472b6; border: 1px solid #ec489944; }
+  .tag-default { background: #64748b22; color: #94a3b8; border: 1px solid #64748b44; }
+
+  .store-card .meta {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+    margin-top: 4px;
+  }
+
+  .store-card .distance {
+    font-size: 13px;
+    color: #94a3b8;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+
+  .store-card .address {
+    font-size: 12px;
+    color: #64748b;
+    margin-top: 4px;
+  }
+
+  .store-card .hours {
+    font-size: 12px;
+    color: #4ade80;
+    margin-top: 4px;
+  }
+
+  .store-card .website {
+    font-size: 12px;
+    margin-top: 4px;
+  }
+
+  .store-card .website a {
+    color: #60a5fa;
+    text-decoration: none;
+  }
+
+  .store-card .website a:hover { text-decoration: underline; }
+
+  .status-bar {
+    padding: 10px 16px;
+    background: #334155;
+    font-size: 13px;
+    color: #94a3b8;
+    text-align: center;
+    border-top: 1px solid #475569;
+  }
+
+  .loading-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15,23,42,0.85);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 9999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+
+  .loading-overlay.active { opacity: 1; pointer-events: auto; }
+
+  .spinner {
+    width: 48px; height: 48px;
+    border: 4px solid #334155;
+    border-top-color: #10b981;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin: 0 auto 16px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: #64748b;
+  }
+
+  .empty-state .emoji { font-size: 48px; margin-bottom: 12px; }
+  .empty-state p { font-size: 14px; line-height: 1.6; }
+
+  .leaflet-popup-content-wrapper {
+    background: #1e293b !important;
+    color: #e2e8f0 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.5) !important;
+  }
+
+  .leaflet-popup-tip { background: #1e293b !important; }
+
+  .leaflet-popup-content {
+    margin: 12px 16px !important;
+    font-family: 'Segoe UI', 'Apple SD Gothic Neo', sans-serif !important;
+  }
+
+  .popup-name { font-weight: 700; font-size: 15px; margin-bottom: 4px; }
+  .popup-dist { font-size: 13px; color: #94a3b8; }
+  .popup-addr { font-size: 12px; color: #64748b; margin-top: 2px; }
+  .popup-hours { font-size: 12px; color: #4ade80; margin-top: 2px; }
+  .popup-web { font-size: 12px; margin-top: 2px; }
+  .popup-web a { color: #60a5fa; text-decoration: none; }
+
+  .distance-rings {
+    font-size: 11px;
+    color: #475569;
+    pointer-events: none;
+  }
+
+  @media (max-width: 768px) {
+    .main-container { flex-direction: column; }
+    .sidebar { width: 100%; max-height: 40vh; border-left: none; border-top: 1px solid #334155; }
+    header h1 { font-size: 16px; }
+    button { padding: 8px 14px; font-size: 13px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1><span style="font-size:26px">📚</span> 주변 도서관 찾기</h1>
+  <div class="controls">
+    <div class="radius-selector">
+      <label>반경</label>
+      <select id="radiusSelect">
+        <option value="1000">1km</option>
+        <option value="2000">2km</option>
+        <option value="3000">3km</option>
+        <option value="5000" selected>5km</option>
+        <option value="10000">10km</option>
+      </select>
+    </div>
+    <button class="secondary" onclick="searchHere()">📍 지도 중심 검색</button>
+    <button onclick="findMyLocation()">🧭 내 위치 검색</button>
+  </div>
+</header>
+
+<div class="main-container">
+  <div id="map"></div>
+  <div class="sidebar">
+    <div class="sidebar-header">
+      <span>도서관 목록</span>
+      <span class="count-badge" id="countBadge">0개</span>
+    </div>
+    <div class="store-list" id="storeList">
+      <div class="empty-state">
+        <div class="emoji">📚</div>
+        <p>지도를 클릭하거나<br><b>내 위치 검색</b> 버튼을 눌러<br>주변 도서관을 찾아보세요</p>
+      </div>
+    </div>
+    <div class="status-bar" id="statusBar">지도를 클릭하면 해당 위치 기준으로 검색합니다</div>
+  </div>
+</div>
+
+<div class="loading-overlay" id="loadingOverlay">
+  <div style="text-align:center">
+    <div class="spinner"></div>
+    <div style="color:#e2e8f0;font-size:15px;">도서관 검색 중...</div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+let map, circle, centerMarker;
+let storeMarkers = [];
+let distanceRings = [];
+
+map = L.map('map', { zoomControl: false }).setView([37.5665, 126.978], 13);
+L.control.zoom({ position: 'topright' }).addTo(map);
+
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+  maxZoom: 19
+}).addTo(map);
+
+map.on('click', e => searchAt(e.latlng.lat, e.latlng.lng));
+
+function getRadius() {
+  return parseInt(document.getElementById('radiusSelect').value);
+}
+
+function getZoomForRadius(r) {
+  if (r <= 1000) return 15;
+  if (r <= 2000) return 14;
+  if (r <= 3000) return 13;
+  if (r <= 5000) return 12;
+  return 11;
+}
+
+function findMyLocation() {
+  if (!navigator.geolocation) { alert('위치 서비스를 지원하지 않는 브라우저입니다.'); return; }
+  showLoading(true);
+  setStatus('현재 위치를 가져오는 중...');
+  navigator.geolocation.getCurrentPosition(
+    pos => searchAt(pos.coords.latitude, pos.coords.longitude),
+    () => { showLoading(false); alert('위치를 가져올 수 없습니다.\n지도를 클릭하여 검색하세요.'); setStatus('위치 접근 실패'); },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
+}
+
+function searchHere() {
+  const c = map.getCenter();
+  searchAt(c.lat, c.lng);
+}
+
+function searchAt(lat, lng) {
+  const radius = getRadius();
+  showLoading(true);
+  setStatus('도서관 검색 중...');
+  clearAll();
+
+  map.setView([lat, lng], getZoomForRadius(radius));
+
+  centerMarker = L.marker([lat, lng], {
+    icon: L.divIcon({
+      className: '',
+      html: '<div style="width:22px;height:22px;background:#10b981;border:3px solid #fff;border-radius:50%;box-shadow:0 2px 8px rgba(0,0,0,0.4);"></div>',
+      iconSize: [22, 22], iconAnchor: [11, 11]
+    })
+  }).addTo(map).bindPopup('<div class="popup-name">내 위치</div>');
+
+  circle = L.circle([lat, lng], {
+    radius: radius,
+    color: '#10b981',
+    fillColor: '#10b981',
+    fillOpacity: 0.06,
+    weight: 2,
+    dashArray: '8 4'
+  }).addTo(map);
+
+  drawDistanceRings(lat, lng, radius);
+  fetchLibraries(lat, lng, radius);
+}
+
+function drawDistanceRings(lat, lng, maxRadius) {
+  const steps = [];
+  if (maxRadius >= 2000) steps.push(1000);
+  if (maxRadius >= 4000) steps.push(2000);
+  if (maxRadius >= 5000) steps.push(3000);
+  if (maxRadius >= 10000) { steps.push(5000); }
+
+  steps.forEach(r => {
+    const ring = L.circle([lat, lng], {
+      radius: r,
+      color: '#475569',
+      fillColor: 'transparent',
+      fillOpacity: 0,
+      weight: 1,
+      dashArray: '4 6',
+      interactive: false
+    }).addTo(map);
+    distanceRings.push(ring);
+
+    const labelLat = lat + (r / 111320);
+    const label = L.marker([labelLat, lng], {
+      icon: L.divIcon({
+        className: 'distance-rings',
+        html: `<span style="background:#1e293b;padding:1px 6px;border-radius:4px;border:1px solid #334155;">${r >= 1000 ? (r/1000) + 'km' : r + 'm'}</span>`,
+        iconSize: [50, 16], iconAnchor: [25, 8]
+      }),
+      interactive: false
+    }).addTo(map);
+    distanceRings.push(label);
+  });
+}
+
+function fetchLibraries(lat, lng, radius) {
+  const query = `
+    [out:json][timeout:25];
+    (
+      node["amenity"="library"](around:${radius},${lat},${lng});
+      way["amenity"="library"](around:${radius},${lat},${lng});
+      relation["amenity"="library"](around:${radius},${lat},${lng});
+    );
+    out center body;
+  `;
+
+  fetch('https://overpass-api.de/api/interpreter', {
+    method: 'POST',
+    body: 'data=' + encodeURIComponent(query)
+  })
+  .then(r => r.json())
+  .then(data => {
+    const libs = data.elements.map(el => {
+      const t = el.tags || {};
+      const elLat = el.lat || (el.center && el.center.lat);
+      const elLng = el.lon || (el.center && el.center.lon);
+      const name = t.name || t['name:ko'] || '도서관';
+      const addr = t['addr:full'] || t['addr:street'] || '';
+      const hours = t.opening_hours || '';
+      const website = t.website || '';
+      const phone = t.phone || '';
+      const libType = detectType(name, t);
+      const dist = haversine(lat, lng, elLat, elLng);
+      return { lat: elLat, lng: elLng, name, addr, hours, website, phone, libType, dist };
+    });
+
+    libs.sort((a, b) => a.dist - b.dist);
+    renderLibraries(libs);
+    showLoading(false);
+    const km = radius >= 1000 ? (radius/1000) + 'km' : radius + 'm';
+    setStatus(`${libs.length}개 도서관 발견 (반경 ${km})`);
+  })
+  .catch(() => {
+    showLoading(false);
+    setStatus('검색 실패 — 다시 시도하세요');
+  });
+}
+
+function detectType(name, tags) {
+  const n = (name + ' ' + (tags.description || '')).toLowerCase();
+  if (n.includes('어린이') || n.includes('children') || n.includes('kids')) return { label: '어린이', cls: 'tag-children' };
+  if (n.includes('대학') || n.includes('university') || n.includes('학교')) return { label: '대학', cls: 'tag-university' };
+  if (n.includes('작은') || n.includes('마을') || n.includes('동네') || n.includes('community')) return { label: '작은도서관', cls: 'tag-community' };
+  if (n.includes('공공') || n.includes('시립') || n.includes('구립') || n.includes('도립') || n.includes('국립') || n.includes('public')) return { label: '공공', cls: 'tag-public' };
+  return { label: '도서관', cls: 'tag-default' };
+}
+
+function renderLibraries(libs) {
+  const list = document.getElementById('storeList');
+  document.getElementById('countBadge').textContent = libs.length + '개';
+
+  if (libs.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="emoji">😢</div><p>해당 반경 내에<br>도서관을 찾지 못했습니다.<br>반경을 넓히거나 다른 위치를 클릭해보세요.</p></div>`;
+    return;
+  }
+
+  list.innerHTML = '';
+
+  libs.forEach((lib, i) => {
+    const distStr = lib.dist < 1000 ? Math.round(lib.dist) + 'm' : (lib.dist / 1000).toFixed(1) + 'km';
+    const color = getTypeColor(lib.libType.cls);
+
+    const marker = L.marker([lib.lat, lib.lng], {
+      icon: L.divIcon({
+        className: '',
+        html: `<div style="
+          background:${color};color:#fff;
+          width:30px;height:30px;border-radius:50%;
+          display:flex;align-items:center;justify-content:center;
+          font-size:14px;font-weight:700;
+          border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,0.3);
+        ">${i + 1}</div>`,
+        iconSize: [30, 30], iconAnchor: [15, 15]
+      })
+    }).addTo(map);
+
+    let popupHtml = `<div class="popup-name">${lib.name}</div><div class="popup-dist">📏 ${distStr}</div>`;
+    if (lib.addr) popupHtml += `<div class="popup-addr">📍 ${lib.addr}</div>`;
+    if (lib.hours) popupHtml += `<div class="popup-hours">🕐 ${lib.hours}</div>`;
+    if (lib.website) popupHtml += `<div class="popup-web">🔗 <a href="${lib.website}" target="_blank">웹사이트</a></div>`;
+    marker.bindPopup(popupHtml);
+    storeMarkers.push(marker);
+
+    const card = document.createElement('div');
+    card.className = 'store-card';
+
+    let cardHtml = `
+      <div class="name">
+        <span>${i + 1}. ${lib.name}</span>
+        <span class="type-tag ${lib.libType.cls}">${lib.libType.label}</span>
+      </div>
+      <div class="meta">
+        <div class="distance">📏 ${distStr}</div>
+      </div>`;
+    if (lib.addr) cardHtml += `<div class="address">📍 ${lib.addr}</div>`;
+    if (lib.hours) cardHtml += `<div class="hours">🕐 ${lib.hours}</div>`;
+    if (lib.website) cardHtml += `<div class="website">🔗 <a href="${lib.website}" target="_blank" onclick="event.stopPropagation()">웹사이트 열기</a></div>`;
+
+    card.innerHTML = cardHtml;
+    card.addEventListener('click', () => { map.setView([lib.lat, lib.lng], 16); marker.openPopup(); });
+    list.appendChild(card);
+  });
+}
+
+function getTypeColor(cls) {
+  switch(cls) {
+    case 'tag-public': return '#10b981';
+    case 'tag-university': return '#8b5cf6';
+    case 'tag-community': return '#f59e0b';
+    case 'tag-children': return '#ec4899';
+    default: return '#64748b';
+  }
+}
+
+function haversine(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function clearAll() {
+  storeMarkers.forEach(m => map.removeLayer(m));
+  storeMarkers = [];
+  distanceRings.forEach(r => map.removeLayer(r));
+  distanceRings = [];
+  if (centerMarker) map.removeLayer(centerMarker);
+  if (circle) map.removeLayer(circle);
+}
+
+function showLoading(show) { document.getElementById('loadingOverlay').classList.toggle('active', show); }
+function setStatus(msg) { document.getElementById('statusBar').textContent = msg; }
+</script>
+</body>
+</html>
