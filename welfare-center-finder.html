@@ -449,6 +449,18 @@ function drawDistanceRings(lat, lng, maxRadius) {
   });
 }
 
+const KNOWN_CENTERS = [
+  {
+    lat: 35.1595, lng: 126.7932,
+    name: '얼곡종합사회복지관',
+    addr: '광주광역시 광산구 풍영로 227',
+    phone: '062-944-9382',
+    hours: 'Mo-Fr 09:00-18:00',
+    website: '',
+    facType: { label: '종합복지관', cls: 'tag-general' }
+  }
+];
+
 function fetchFacilities(lat, lng, radius) {
   const query = `
     [out:json][timeout:25];
@@ -460,8 +472,11 @@ function fetchFacilities(lat, lng, radius) {
       way["social_facility"](around:${radius},${lat},${lng});
       node["office"="welfare"](around:${radius},${lat},${lng});
       way["office"="welfare"](around:${radius},${lat},${lng});
-      node["name"~"복지관|복지센터|사회복지|welfare",i](around:${radius},${lat},${lng});
-      way["name"~"복지관|복지센터|사회복지|welfare",i](around:${radius},${lat},${lng});
+      node["amenity"="community_centre"](around:${radius},${lat},${lng});
+      way["amenity"="community_centre"](around:${radius},${lat},${lng});
+      node["name"~"복지관|복지센터|사회복지|welfare|복지회관",i](around:${radius},${lat},${lng});
+      way["name"~"복지관|복지센터|사회복지|welfare|복지회관",i](around:${radius},${lat},${lng});
+      relation["name"~"복지관|복지센터|사회복지|welfare|복지회관",i](around:${radius},${lat},${lng});
     );
     out center body;
   `;
@@ -493,6 +508,15 @@ function fetchFacilities(lat, lng, radius) {
       const facType = detectType(name, t);
       const dist = haversine(lat, lng, elLat, elLng);
       facilities.push({ lat: elLat, lng: elLng, name, addr, hours, website, phone, facType, dist });
+    });
+
+    KNOWN_CENTERS.forEach(kc => {
+      const dist = haversine(lat, lng, kc.lat, kc.lng);
+      if (dist > radius) return;
+      const key = `${kc.lat.toFixed(5)},${kc.lng.toFixed(5)}`;
+      if (seen.has(key)) return;
+      seen.add(key);
+      facilities.push({ ...kc, dist });
     });
 
     facilities.sort((a, b) => a.dist - b.dist);
